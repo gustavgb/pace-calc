@@ -1,4 +1,4 @@
-const CACHE_NAME = "pace-calculator-v7";
+const CACHE_NAME = "pace-calculator-v8";
 const urlsToCache = [
   "./",
   "./index.html",
@@ -19,50 +19,61 @@ self.addEventListener("install", (event) => {
   self.skipWaiting();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - use the network, falling back to the cache when offline
 self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((response) => {
-      // Cache hit - return response
-      if (response) {
-        return response;
-      }
-      // Clone the request
-      const fetchRequest = event.request.clone();
+  const requestUrl = new URL(event.request.url);
 
-      return fetch(fetchRequest).then((response) => {
-        // Check if valid response
-        if (!response || response.status !== 200 || response.type !== "basic") {
-          return response;
-        }
+  if (event.request.method !== "GET" || requestUrl.origin !== self.location.origin) {
+    return;
+  }
 
-        // Clone the response
-        const responseToCache = response.clone();
-
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return response;
-      });
-    })
-  );
+  event.respondWith(networkFirst(event.request));
 });
+
+async function networkFirst(request) {
+  try {
+    const response = await fetch(request);
+
+    if (response.ok && response.type === "basic") {
+      const cache = await caches.open(CACHE_NAME);
+      await cache.put(request, response.clone());
+    }
+
+    return response;
+  } catch (error) {
+    const cachedResponse = await caches.match(request);
+
+    if (cachedResponse) {
+      return cachedResponse;
+    }
+
+    if (request.mode === "navigate") {
+      const offlinePage = await caches.match("./index.html");
+      if (offlinePage) return offlinePage;
+    }
+
+    return new Response("Offline", {
+      status: 503,
+      headers: { "Content-Type": "text/plain" },
+    });
+  }
+}
 
 // Activate event - clean up old caches
 self.addEventListener("activate", (event) => {
   const cacheWhitelist = [CACHE_NAME];
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheWhitelist.indexOf(cacheName) === -1) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    })
+    caches
+      .keys()
+      .then((cacheNames) =>
+        Promise.all(
+          cacheNames.map((cacheName) => {
+            if (cacheWhitelist.indexOf(cacheName) === -1) {
+              return caches.delete(cacheName);
+            }
+          })
+        )
+      )
+      .then(() => self.clients.claim())
   );
-  // Claim clients immediately
-  return self.clients.claim();
 });
