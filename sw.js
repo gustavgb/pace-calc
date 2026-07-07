@@ -1,4 +1,4 @@
-const CACHE_NAME = "pace-calculator-v1";
+const CACHE_NAME = "pace-calculator-v4";
 const urlsToCache = [
   "./",
   "./index.html",

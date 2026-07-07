@@ -1,4 +1,6 @@
 // Register Service Worker for PWA
+let copyResetTimer;
+
 if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('./sw.js')
@@ -19,10 +21,14 @@ function calculatePace() {
   const errorEl = document.getElementById("error");
   const resultEl = document.getElementById("result");
   const paceEl = document.getElementById("pace");
+  const copyButtonEl = document.getElementById("copy-button");
 
   // Reset error and result
   errorEl.classList.remove("show");
   resultEl.classList.remove("show");
+  copyButtonEl.classList.remove("copied");
+  copyButtonEl.textContent = "Copy result";
+  clearTimeout(copyResetTimer);
 
   // Validation
   if (!distance || distance <= 0) {
@@ -50,8 +56,9 @@ function calculatePace() {
   const paceSeconds = totalSeconds / distance;
 
   // Convert to mm:ss format
-  const paceMinutes = Math.floor(paceSeconds / 60);
-  const paceSecs = Math.round(paceSeconds % 60);
+  const roundedPaceSeconds = Math.round(paceSeconds);
+  const paceMinutes = Math.floor(roundedPaceSeconds / 60);
+  const paceSecs = roundedPaceSeconds % 60;
 
   // Format the result
   const formattedPace = `${paceMinutes}:${paceSecs
@@ -59,7 +66,42 @@ function calculatePace() {
     .padStart(2, "0")}`;
 
   paceEl.textContent = formattedPace;
+  const formattedTime = `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  copyButtonEl.dataset.copyText = `${distance} km · ⏱ ${formattedTime} · ${formattedPace} min/km`;
   resultEl.classList.add("show");
+}
+
+async function copyResult() {
+  const copyButtonEl = document.getElementById("copy-button");
+  const text = copyButtonEl.dataset.copyText;
+
+  if (!text) return;
+
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      textArea.style.position = "fixed";
+      textArea.style.opacity = "0";
+      document.body.appendChild(textArea);
+      textArea.select();
+      const copied = document.execCommand("copy");
+      textArea.remove();
+      if (!copied) throw new Error("Copy command failed");
+    }
+
+    copyButtonEl.classList.add("copied");
+    copyButtonEl.textContent = "Copied!";
+    clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      copyButtonEl.classList.remove("copied");
+      copyButtonEl.textContent = "Copy result";
+    }, 5000);
+  } catch (error) {
+    copyButtonEl.textContent = "Could not copy";
+  }
 }
 
 // Allow Enter key to calculate
